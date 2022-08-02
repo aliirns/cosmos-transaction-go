@@ -72,16 +72,15 @@ func getAccount(address string) (authtypes.AccountI, error) {
 }
 
 //
-func TxPylons(accountAddress string, privateKeyHex string, grpcURL string, msg sdk.Msg, chainID string) (*txtypes.BroadcastTxResponse, error) {
+func TxPylons(accountAddress string, privateKeyHex string, grpcURL string, msg sdk.Msg, chainID string, grpcConn *grpc.ClientConn) (*txtypes.BroadcastTxResponse, error) {
+	// grpcConn, err := dialGrpc(grpcURL)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	grpcConn, err := dialGrpc(grpcURL)
-	if err != nil {
-		return nil, err
-	}
-
-	defer grpcConn.Close()
-
+	// defer grpcConn.Close()
 	//Configuration
+
 	encfg := pylonsApp.DefaultConfig()
 	txBuilder := encfg.TxConfig.NewTxBuilder()
 	theaccount := accountAddress
@@ -97,7 +96,7 @@ func TxPylons(accountAddress string, privateKeyHex string, grpcURL string, msg s
 
 	//creating transaction
 	txBuilder.SetGasLimit(uint64(200000))
-	err = txBuilder.SetMsgs([]sdk.Msg{msg}...)
+	err := txBuilder.SetMsgs([]sdk.Msg{msg}...)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +254,7 @@ func TxsPylons(accountAddress string, privateKeyHex string, grpcURL string, msgs
 	grpcRes, err := txClient.BroadcastTx(
 		context.Background(),
 		&txtypes.BroadcastTxRequest{
-			Mode:    txtypes.BroadcastMode_BROADCAST_MODE_BLOCK,
+			Mode:    txtypes.BroadcastMode_BROADCAST_MODE_ASYNC,
 			TxBytes: txBytes, // Proto-binary of the signed transaction, see previous step.
 		},
 	)

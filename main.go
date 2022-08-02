@@ -6,6 +6,7 @@ import (
 	"os"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"google.golang.org/grpc"
 )
 
 //"fmt"
@@ -24,8 +25,8 @@ func main() {
 
 	defer f.Close()
 
-	myaddress := "pylo1clzj28ysxvfy420gafu7f73lvafv4l5yjj77cf"
-	myprivateKey := "091d3c2ec85b818f0d517fa6c8f832cb6c69d296a4a95f0674879950d6fa6fb8"
+	myaddress := "pylo1rsx89p92y36fcymuwdzxr9v0gzt5ksdp8cv8lv"                         //"pylo1clzj28ysxvfy420gafu7f73lvafv4l5yjj77cf"
+	myprivateKey := "7501369bef07ec31db3213e017a0ad511fe96dcc919a21517ad1478d22a3cb34" //"091d3c2ec85b818f0d517fa6c8f832cb6c69d296a4a95f0674879950d6fa6fb8"
 	W := Wallet{address: myaddress}
 	//testedFunction := "ExecuteRecipe"
 	//incrementBy := 1
@@ -46,18 +47,25 @@ func main() {
 	// 	fmt.Println(testedFunction, i, diff, res.TxResponse.Code, res.TxResponse.TxHash, res.TxResponse.GasUsed, res.TxResponse.GasWanted, myaddress)
 	// }
 
-	Msgs := W.ExecuteRecipes(offsetCal, 2, "cb130", "LOUDGetCharactercb130")
+	Msgs := W.ExecuteRecipes(offsetCal, 10, "cb131", "LOUDGetCharactercb131")
+
+	grpcConn, err := dialGrpc(grpcURL)
+	if err != nil {
+		log.Fatal(nil, err)
+	}
+
+	defer grpcConn.Close()
 
 	for i, m := range Msgs {
-		go threaded(myaddress, myprivateKey, m, i)
+		go threaded(myaddress, myprivateKey, m, i, grpcConn)
 	}
 
 	select {}
 
 }
 
-func threaded(myaddress string, myprivateKey string, m sdk.Msg, i int) {
-	res, err := TxPylons(myaddress, myprivateKey, grpcURL, m, chainID)
+func threaded(myaddress string, myprivateKey string, m sdk.Msg, i int, grpcConn *grpc.ClientConn) {
+	res, err := TxPylons(myaddress, myprivateKey, grpcURL, m, chainID, grpcConn)
 	if err != nil {
 
 		log.Fatal(err, res)
