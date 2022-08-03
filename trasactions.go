@@ -48,6 +48,7 @@ func dialGrpc(endpoint string) (*grpc.ClientConn, error) {
 	return grpcConn, nil
 }
 
+//Get Account and Account Sequence
 func getAccount(address string) (authtypes.AccountI, error) {
 
 	grpcConn, err := dialGrpc(grpcURL)
@@ -71,32 +72,26 @@ func getAccount(address string) (authtypes.AccountI, error) {
 	return account, nil
 }
 
-//
-func TxPylons(accountAddress string, privateKeyHex string, grpcURL string, msg sdk.Msg, chainID string, grpcConn *grpc.ClientConn) (*txtypes.BroadcastTxResponse, error) {
-	// grpcConn, err := dialGrpc(grpcURL)
-	// if err != nil {
-	// 	return nil, err
-	// }
+//Single MSG BroadCast
+func TxPylons(accountAddress string, privateKeyHex string, grpcURL string, msg sdk.Msg, chainID string) (*txtypes.BroadcastTxResponse, error) {
+	grpcConn, err := dialGrpc(grpcURL)
+	if err != nil {
+		return nil, err
+	}
 
-	// defer grpcConn.Close()
-	//Configuration
+	defer grpcConn.Close()
 
 	encfg := pylonsApp.DefaultConfig()
 	txBuilder := encfg.TxConfig.NewTxBuilder()
 	theaccount := accountAddress
 
-	//Validate Message
-	// msg := types.MsgCreateAccount{
-	// 	Creator:  theaccount,
-	// 	Username: "the usrename",
-	// 	Token:    "", ReferralAddress: ""}
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, err
 	}
 
 	//creating transaction
 	txBuilder.SetGasLimit(uint64(200000))
-	err := txBuilder.SetMsgs([]sdk.Msg{msg}...)
+	err = txBuilder.SetMsgs([]sdk.Msg{msg}...)
 	if err != nil {
 		return nil, err
 	}
@@ -160,6 +155,7 @@ func TxPylons(accountAddress string, privateKeyHex string, grpcURL string, msg s
 	return grpcRes, err
 }
 
+//Multiple MSGS Brodcasr
 func TxsPylons(accountAddress string, privateKeyHex string, grpcURL string, msgs []sdk.Msg, chainID string) (*txtypes.BroadcastTxResponse, error) {
 
 	grpcConn, err := dialGrpc(grpcURL)

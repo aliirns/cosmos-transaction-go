@@ -1,75 +1,70 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
 	"log"
 	"os"
 
+	//"strconv"
+	"sync"
+	//"time"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"google.golang.org/grpc"
+	// 	"os"
+	// 	"os/exec"
+	// 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 //"fmt"
 
 const (
-	grpcURL = "127.0.0.1:9090"
-	chainID = "pylons-testnet-1"
+	grpcURL     = "127.0.0.1:9090"
+	chainID     = "pylons-testnet-1"
+	_KEYNAME    = 0
+	_ADDRESS    = 1
+	_PRIVATEKEY = 2
 )
+
+var wg sync.WaitGroup
 
 func main() {
 
-	f, err := os.OpenFile("TestLogs-Execute-Recipe-2.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		fmt.Println("error opening file: %v", err)
-	}
+	C := Chef{address: "pylo1clzj28ysxvfy420gafu7f73lvafv4l5yjj77cf"}
+	msg := C.CreateComplexRecipeEasel("cb130", "cb131E")
 
-	defer f.Close()
+	wg.Add(1)
 
-	myaddress := "pylo1rsx89p92y36fcymuwdzxr9v0gzt5ksdp8cv8lv"                         //"pylo1clzj28ysxvfy420gafu7f73lvafv4l5yjj77cf"
-	myprivateKey := "7501369bef07ec31db3213e017a0ad511fe96dcc919a21517ad1478d22a3cb34" //"091d3c2ec85b818f0d517fa6c8f832cb6c69d296a4a95f0674879950d6fa6fb8"
-	W := Wallet{address: myaddress}
-	//testedFunction := "ExecuteRecipe"
-	//incrementBy := 1
-	offsetCal := 0
+	go threadedLoadTest("alii", C.address, "091d3c2ec85b818f0d517fa6c8f832cb6c69d296a4a95f0674879950d6fa6fb8", &msg, 0, "Create-Recipe")
 
-	// for i := 1; i < 10; i += incrementBy {
-
-	// 	t1 := time.Now()
-	// 	res, _ := TxsPylons(myaddress, myprivateKey, grpcURL, W.ExecuteRecipes(offsetCal, i, "cb130", "LOUDGetCharactercb130"), chainID)
-	// 	offsetCal += i
-
-	// 	t2 := time.Now()
-	// 	diff := t2.Sub(t1)
-
-	log.SetOutput(f)
-	// 	log.Println(testedFunction, i, diff, res.TxResponse.Code, res.TxResponse.TxHash, res.TxResponse.GasUsed, res.TxResponse.GasWanted, myaddress)
-
-	// 	fmt.Println(testedFunction, i, diff, res.TxResponse.Code, res.TxResponse.TxHash, res.TxResponse.GasUsed, res.TxResponse.GasWanted, myaddress)
-	// }
-
-	Msgs := W.ExecuteRecipes(offsetCal, 10, "cb131", "LOUDGetCharactercb131")
-
-	grpcConn, err := dialGrpc(grpcURL)
-	if err != nil {
-		log.Fatal(nil, err)
-	}
-
-	defer grpcConn.Close()
-
-	for i, m := range Msgs {
-		go threaded(myaddress, myprivateKey, m, i, grpcConn)
-	}
-
-	select {}
+	wg.Wait()
 
 }
 
-func threaded(myaddress string, myprivateKey string, m sdk.Msg, i int, grpcConn *grpc.ClientConn) {
-	res, err := TxPylons(myaddress, myprivateKey, grpcURL, m, chainID, grpcConn)
+//read address and keys from CSV
+func readCsvFile(filePath string) [][]string {
+	f, err := os.Open(filePath)
 	if err != nil {
-
-		log.Fatal(err, res)
+		log.Fatal("Unable to read input file "+filePath, err)
 	}
-	fmt.Println("Execute Recipe", i, res.TxResponse.Code, res.TxResponse.TxHash, res.TxResponse.GasUsed, res.TxResponse.GasWanted, myaddress)
-	log.Println("Execute Recipe", i, res.TxResponse.Code, res.TxResponse.TxHash, res.TxResponse.GasUsed, res.TxResponse.GasWanted, myaddress)
+	defer f.Close()
+
+	csvReader := csv.NewReader(f)
+	records, err := csvReader.ReadAll()
+	if err != nil {
+		log.Fatal("Unable to parse file as CSV for "+filePath, err)
+	}
+
+	return records
+}
+
+//go
+func threadedLoadTest(myKey string, myaddress string, myprivateKey string, m sdk.Msg, i int, txString string) {
+	defer wg.Done()
+	res, err := TxPylons(myaddress, myprivateKey, grpcURL, m, chainID)
+
+	if err != nil {
+		fmt.Println("A Failure as occured", err)
+	}
+	log.Println(i, txString, res.TxResponse.Code, res.TxResponse.Height, myKey, res.TxResponse.TxHash)
 }
