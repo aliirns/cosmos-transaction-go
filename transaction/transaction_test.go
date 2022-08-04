@@ -14,7 +14,7 @@ const (
 	grpcURL  = "127.0.0.1:9090"
 	address  = "pylo1clzj28ysxvfy420gafu7f73lvafv4l5yjj77cf"
 	privKey  = "091d3c2ec85b818f0d517fa6c8f832cb6c69d296a4a95f0674879950d6fa6fb8"
-	Sequence = 158
+	Sequence = 162
 	chainID  = "pylons-testnet-1"
 )
 
