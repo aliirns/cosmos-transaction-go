@@ -33,15 +33,31 @@ const (
 
 func main(){
     config := pylonsApp.DefaultConfig()
-    types.NewMsgSend(sdk.AccAddress(addr), sdk.AccAddress(receiver), coins)
-    res, err := CosmosTx(address, privKey, grpcURL, msg, chainID)
+	
+	//Transaction Params
+	coins, err := sdk.ParseCoinsNormalized("1upylon")
+	addr, err := sdk.AccAddressFromBech32(address)
+	receiver, err := sdk.AccAddressFromBech32("receiver address")
+
+
+	//Transaction MSG
+    msg := types.NewMsgSend(sdk.AccAddress(addr), sdk.AccAddress(receiver), coins)
+	
+	//config 
+	config := pylonsApp.DefaultConfig()
+	
+	//Tx
+	res, err := CosmosTx(address, privKey, grpcURL, msg, chainID, config)
+
+	
     fmt.Println(res.TxResponse.Code)
+
 }
 ```
 
 ## Exporting Private Key in Hex
 
-`chaind keys export alii --unsafe --unarmored-hex`
+`pylonsd keys export <keyName> --unsafe --unarmored-hex`
 
 # License
 
