@@ -10,6 +10,7 @@ import (
 	pylonsApp "github.com/Pylons-tech/pylons/app"
 	"github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	"github.com/cosmos/cosmos-sdk/testutil/network"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	txtypes "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
@@ -72,7 +73,7 @@ func getAccount(address string, grpcURL string) (authtypes.AccountI, error) {
 }
 
 //Single MSG BroadCast
-func CosmosTx(accountAddress string, privateKeyHex string, grpcURL string, msg sdk.Msg, chainID string) (*txtypes.BroadcastTxResponse, error) {
+func CosmosTx(accountAddress string, privateKeyHex string, grpcURL string, msg sdk.Msg, chainID string, encfg network.Config) (*txtypes.BroadcastTxResponse, error) {
 	grpcConn, err := dialGrpc(grpcURL)
 	if err != nil {
 		return nil, err
@@ -80,7 +81,6 @@ func CosmosTx(accountAddress string, privateKeyHex string, grpcURL string, msg s
 
 	defer grpcConn.Close()
 
-	encfg := pylonsApp.DefaultConfig()
 	txBuilder := encfg.TxConfig.NewTxBuilder()
 	theaccount := accountAddress
 
@@ -162,7 +162,7 @@ func CosmosTx(accountAddress string, privateKeyHex string, grpcURL string, msg s
 }
 
 //Multiple MSGS Broadcast
-func CosmosTxs(accountAddress string, privateKeyHex string, grpcURL string, msgs []sdk.Msg, chainID string) (*txtypes.BroadcastTxResponse, error) {
+func CosmosTxs(accountAddress string, privateKeyHex string, grpcURL string, msgs []sdk.Msg, chainID string, encfg network.Config) (*txtypes.BroadcastTxResponse, error) {
 
 	grpcConn, err := dialGrpc(grpcURL)
 	if err != nil {
@@ -172,7 +172,6 @@ func CosmosTxs(accountAddress string, privateKeyHex string, grpcURL string, msgs
 	defer grpcConn.Close()
 
 	//Configuration
-	encfg := pylonsApp.DefaultConfig()
 	txBuilder := encfg.TxConfig.NewTxBuilder()
 	theaccount := accountAddress
 
