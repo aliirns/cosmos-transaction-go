@@ -1,4 +1,4 @@
-module github.com/aliirns/cosmos-transaction
+module github.com/aliirns/cosmos-transaction-go
 
 go 1.18
 
