@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	pylonsApp "github.com/Pylons-tech/pylons/app"
-	"github.com/aliirns/cosmos-transaction/pylons"
+	"github.com/aliirns/cosmos-transaction-go/pylons"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/bank/types"
 )
