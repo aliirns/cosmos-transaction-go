@@ -5,22 +5,18 @@ import (
 	"testing"
 
 	pylonsApp "github.com/Pylons-tech/pylons/app"
-	"github.com/aliirns/cosmos-transaction-go/pylons"
+	txtypes "github.com/aliirns/cosmos-transaction-go/txtypes"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/x/bank/types"
-)
-
-const (
-	grpcURL  = "127.0.0.1:9090"
-	address  = "pylo1clzj28ysxvfy420gafu7f73lvafv4l5yjj77cf"
-	privKey  = "091d3c2ec85b818f0d517fa6c8f832cb6c69d296a4a95f0674879950d6fa6fb8"
-	Sequence = 162
-	chainID  = "pylons-testnet-1"
+	clienttypes "github.com/cosmos/ibc-go/v5/modules/core/02-client/types"
 )
 
 func TestGetAccount(t *testing.T) {
+
 	t.Parallel()
-	res, err := getAccount(address, grpcURL)
+	conf := pylonsApp.DefaultConfig()
+	address := ""
+	CT := CosmosTransaction{grpcURL: "", accountAddress: address, privateKeyHex: "", networkConfig: conf, chainID: "pylons-testnet-3"}
+	res, err := CT.GetAccount()
 
 	if err != nil {
 		t.FailNow()
@@ -31,32 +27,32 @@ func TestGetAccount(t *testing.T) {
 		t.Errorf("got %v \n expected %v \n", Address, address)
 	}
 
-	seq := res.GetSequence()
-	if seq != Sequence {
-		t.Errorf("got %v \n expected %v\n", seq, Sequence)
-	}
-
 }
 
 func TestCosmosTx(t *testing.T) {
 	//SEND COINS
-	coins, err := sdk.ParseCoinsNormalized("1upylon")
+	address := ""
+	conf := pylonsApp.DefaultConfig()
+	CT := CosmosTransaction{grpcURL: "", accountAddress: address, privateKeyHex: "", networkConfig: conf, chainID: "pylons-testnet-3"}
+	CT.SetPrefixes("pylo")
+
+	receiver := "pylo1v9gr07lcfmpmy8c8f2paasjuwfg7leyvrue56g"
+
+	coins, err := sdk.ParseCoinsNormalized("100000upylon")
+	if err != nil {
+		t.FailNow()
+	}
+	cosmosBankMsg, err := txtypes.NewSendTx(address, string(receiver), coins)
 	if err != nil {
 		t.FailNow()
 	}
 
-	addr, err := sdk.AccAddressFromBech32(address)
-	if err != nil {
-		t.FailNow()
-	}
-	receiver, err := sdk.AccAddressFromBech32("pylo1v9gr07lcfmpmy8c8f2paasjuwfg7leyvrue56g")
+	txBytes, err := CT.SignValidateTx(cosmosBankMsg, 700)
 	if err != nil {
 		t.FailNow()
 	}
 
-	msg := types.NewMsgSend(sdk.AccAddress(addr), sdk.AccAddress(receiver), coins)
-	config := pylonsApp.DefaultConfig()
-	res, err := CosmosTx(address, privKey, grpcURL, msg, chainID, config)
+	res, err := CT.BroadcastTx(txBytes)
 	if err != nil {
 		t.Errorf("transaction failed")
 		fmt.Println(err)
@@ -67,33 +63,30 @@ func TestCosmosTx(t *testing.T) {
 	if Code != 0 {
 		t.Errorf("go %v \n expected %v \n", Code, 0)
 	}
-
 }
 
-func TestCosmosTxs(t *testing.T) {
-	//SEND COINS
-	coins, err := sdk.ParseCoinsNormalized("1upylon")
+func TestIBCTx(t *testing.T) {
+	address := "pylonsAccount"
+	conf := pylonsApp.DefaultConfig()
+	CT := CosmosTransaction{grpcURL: "", accountAddress: address, privateKeyHex: "", networkConfig: conf, chainID: "pylons-testnet-3"}
+	CT.SetPrefixes("pylo")
+
+	receiver := "axelarAccount"
+
+	coin, err := sdk.ParseCoinNormalized("1000upylon")
 	if err != nil {
 		t.FailNow()
 	}
 
-	addr, err := sdk.AccAddressFromBech32(address)
-	if err != nil {
-		t.FailNow()
-	}
-	receiver, err := sdk.AccAddressFromBech32("pylo1v9gr07lcfmpmy8c8f2paasjuwfg7leyvrue56g")
+	H := clienttypes.NewHeight(3, 3560000)
+	cosmosIBCMsg := txtypes.NewIBCTransferTx(address, receiver, coin, "channel-58", H)
+
+	txBytes, err := CT.SignValidateTx(cosmosIBCMsg, 700)
 	if err != nil {
 		t.FailNow()
 	}
 
-	//mulitple transactions can be sent
-	pylonsMsg := pylons.CreateComplexRecipeEasel("cb86", "cb131E", address)
-	cosmosBankMsg := types.NewMsgSend(sdk.AccAddress(addr), sdk.AccAddress(receiver), coins)
-	msg := []sdk.Msg{cosmosBankMsg, &pylonsMsg}
-
-	//msg = append(msg, )
-	config := pylonsApp.DefaultConfig()
-	res, err := CosmosTxs(address, privKey, grpcURL, msg, chainID, config)
+	res, err := CT.BroadcastTx(txBytes)
 	if err != nil {
 		t.Errorf("transaction failed")
 		fmt.Println(err)
