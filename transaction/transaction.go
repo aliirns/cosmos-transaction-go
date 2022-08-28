@@ -19,7 +19,15 @@ import (
 	"google.golang.org/grpc"
 )
 
-func SetPrefixes(accountAddressPrefix string) {
+type CosmosTransaction struct {
+	grpcURL        string
+	accountAddress string
+	privateKeyHex  string
+	networkConfig  network.Config
+	chainID        string
+}
+
+func (C *CosmosTransaction) SetPrefixes(accountAddressPrefix string) {
 	// Set prefixes
 	accountPubKeyPrefix := accountAddressPrefix + "pub"
 	validatorAddressPrefix := accountAddressPrefix + "valoper"
@@ -35,9 +43,9 @@ func SetPrefixes(accountAddressPrefix string) {
 	config.Seal()
 }
 
-func dialGrpc(endpoint string) (*grpc.ClientConn, error) {
+func (C *CosmosTransaction) dialGrpc() (*grpc.ClientConn, error) {
 	grpcConn, err := grpc.Dial(
-		endpoint,
+		C.grpcURL,
 		grpc.WithInsecure())
 
 	if err != nil {
@@ -49,9 +57,9 @@ func dialGrpc(endpoint string) (*grpc.ClientConn, error) {
 }
 
 //Get Account and Account Sequence
-func getAccount(address string, grpcURL string) (authtypes.AccountI, error) {
+func (C *CosmosTransaction) GetAccount() (authtypes.AccountI, error) {
 
-	grpcConn, err := dialGrpc(grpcURL)
+	grpcConn, err := C.dialGrpc()
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +67,7 @@ func getAccount(address string, grpcURL string) (authtypes.AccountI, error) {
 	defer grpcConn.Close()
 
 	authClient := authtypes.NewQueryClient(grpcConn)
-	authRes, err := authClient.Account(context.Background(), &authtypes.QueryAccountRequest{Address: address})
+	authRes, err := authClient.Account(context.Background(), &authtypes.QueryAccountRequest{Address: C.accountAddress})
 	if err != nil {
 		return nil, err
 	}
@@ -72,44 +80,38 @@ func getAccount(address string, grpcURL string) (authtypes.AccountI, error) {
 	return account, nil
 }
 
-//Single MSG BroadCast
-func CosmosTx(accountAddress string, privateKeyHex string, grpcURL string, msg sdk.Msg, chainID string, encfg network.Config) (*txtypes.BroadcastTxResponse, error) {
-	grpcConn, err := dialGrpc(grpcURL)
-	if err != nil {
-		return nil, err
-	}
+func (C *CosmosTransaction) SignValidateTx(msg sdk.Msg, gasLimit uint64) ([]byte, error) {
 
-	defer grpcConn.Close()
-
-	txBuilder := encfg.TxConfig.NewTxBuilder()
-	theaccount := accountAddress
-
+	//Validate Msg
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, err
 	}
 
+	txBuilder := C.networkConfig.TxConfig.NewTxBuilder()
+
 	//creating transaction
-	txBuilder.SetGasLimit(uint64(200000))
-	err = txBuilder.SetMsgs([]sdk.Msg{msg}...)
+	txBuilder.SetGasLimit(gasLimit)
+	err := txBuilder.SetMsgs([]sdk.Msg{msg}...)
 	if err != nil {
 		return nil, err
 	}
 
 	//export private key --unsafe --unarmored-hex
-	keyBytes, _ := hex.DecodeString(privateKeyHex)
+	keyBytes, _ := hex.DecodeString(C.privateKeyHex)
 	key := secp256k1.PrivKey{Key: keyBytes}
 
 	//get Account and Sequence
-	account, err := getAccount(theaccount, grpcURL)
+	account, err := C.GetAccount()
 	if err != nil {
 		return nil, err
 	}
 
-	//signing Transactions
+	//Signing Tx
+	//Empty Signature Step 1
 	sigV2 := signing.SignatureV2{
 		PubKey: key.PubKey(),
 		Data: &signing.SingleSignatureData{
-			SignMode:  encfg.TxConfig.SignModeHandler().DefaultMode(),
+			SignMode:  C.networkConfig.TxConfig.SignModeHandler().DefaultMode(),
 			Signature: nil,
 		},
 		Sequence: account.GetSequence(),
@@ -121,17 +123,18 @@ func CosmosTx(accountAddress string, privateKeyHex string, grpcURL string, msg s
 	}
 
 	signerData := xauthsigning.SignerData{
-		ChainID:       chainID,
+		ChainID:       C.chainID,
 		AccountNumber: account.GetAccountNumber(),
 		Sequence:      account.GetSequence(),
 	}
 
+	//Signature Step2
 	sigV2, err = tx.SignWithPrivKey(
-		encfg.TxConfig.SignModeHandler().DefaultMode(),
+		C.networkConfig.TxConfig.SignModeHandler().DefaultMode(),
 		signerData,
 		txBuilder,
 		&key,
-		encfg.TxConfig,
+		C.networkConfig.TxConfig,
 		account.GetSequence(),
 	)
 	if err != nil {
@@ -143,73 +146,124 @@ func CosmosTx(accountAddress string, privateKeyHex string, grpcURL string, msg s
 		return nil, err
 	}
 
-	txBytes, err := encfg.TxConfig.TxEncoder()(txBuilder.GetTx())
+	txBytes, err := C.networkConfig.TxConfig.TxEncoder()(txBuilder.GetTx())
 	if err != nil {
 		return nil, err
 	}
 
-	//Broadcasting transactions
-	txClient := txtypes.NewServiceClient(grpcConn)
-	grpcRes, err := txClient.BroadcastTx(
-		context.Background(),
-		&txtypes.BroadcastTxRequest{
-			Mode:    txtypes.BroadcastMode_BROADCAST_MODE_BLOCK,
-			TxBytes: txBytes, // Proto-binary of the signed transaction, see previous step.
-		},
-	)
+	return txBytes, nil
 
-	return grpcRes, err
 }
 
-//Multiple MSGS Broadcast
-func CosmosTxs(accountAddress string, privateKeyHex string, grpcURL string, msgs []sdk.Msg, chainID string, encfg network.Config) (*txtypes.BroadcastTxResponse, error) {
+func (C *CosmosTransaction) SignTx(msg sdk.Msg, gasLimit uint64) ([]byte, error) {
 
-	grpcConn, err := dialGrpc(grpcURL)
+	txBuilder := C.networkConfig.TxConfig.NewTxBuilder()
+
+	//creating transaction
+	txBuilder.SetGasLimit(gasLimit)
+	err := txBuilder.SetMsgs([]sdk.Msg{msg}...)
 	if err != nil {
 		return nil, err
 	}
 
+	//export private key --unsafe --unarmored-hex
+	keyBytes, _ := hex.DecodeString(C.privateKeyHex)
+	key := secp256k1.PrivKey{Key: keyBytes}
+
+	//get Account and Sequence
+	account, err := C.GetAccount()
+	if err != nil {
+		return nil, err
+	}
+
+	//Signing Tx
+	//Empty Signature Step 1
+	sigV2 := signing.SignatureV2{
+		PubKey: key.PubKey(),
+		Data: &signing.SingleSignatureData{
+			SignMode:  C.networkConfig.TxConfig.SignModeHandler().DefaultMode(),
+			Signature: nil,
+		},
+		Sequence: account.GetSequence(),
+	}
+
+	err = txBuilder.SetSignatures(sigV2)
+	if err != nil {
+		return nil, err
+	}
+
+	signerData := xauthsigning.SignerData{
+		ChainID:       C.chainID,
+		AccountNumber: account.GetAccountNumber(),
+		Sequence:      account.GetSequence(),
+	}
+
+	//Signature Step2
+	sigV2, err = tx.SignWithPrivKey(
+		C.networkConfig.TxConfig.SignModeHandler().DefaultMode(),
+		signerData,
+		txBuilder,
+		&key,
+		C.networkConfig.TxConfig,
+		account.GetSequence(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = txBuilder.SetSignatures(sigV2)
+	if err != nil {
+		return nil, err
+	}
+
+	txBytes, err := C.networkConfig.TxConfig.TxEncoder()(txBuilder.GetTx())
+	if err != nil {
+		return nil, err
+	}
+
+	return txBytes, nil
+
+}
+
+func (C *CosmosTransaction) SignValidateTxs(msgs []sdk.Msg, gasLimit uint64) ([]byte, error) {
+	grpcConn, err := C.dialGrpc()
+	if err != nil {
+		return []byte{}, err
+	}
 	defer grpcConn.Close()
 
-	//Configuration
-	txBuilder := encfg.TxConfig.NewTxBuilder()
-	theaccount := accountAddress
-
-	//Validate Message
-	// msg := types.MsgCreateAccount{
-	// 	Creator:  theaccount,
-	// 	Username: "the usrename",
-	// 	Token:    "", ReferralAddress: ""}
+	//Validate Msg
 	for _, msg := range msgs {
 		if err := msg.ValidateBasic(); err != nil {
 			return nil, err
 		}
 	}
 
-	//Set Estimated Gas Limit
-	//txBuilder.SetGasLimit(20)
+	txBuilder := C.networkConfig.TxConfig.NewTxBuilder()
 
 	//creating transaction
+	txBuilder.SetGasLimit(gasLimit)
 	err = txBuilder.SetMsgs(msgs...)
 	if err != nil {
 		return nil, err
 	}
 
 	//export private key --unsafe --unarmored-hex
-	keyBytes, _ := hex.DecodeString(privateKeyHex)
+	keyBytes, _ := hex.DecodeString(C.privateKeyHex)
 	key := secp256k1.PrivKey{Key: keyBytes}
 
 	//get Account and Sequence
-	account, err := getAccount(theaccount, grpcURL)
+	account, err := C.GetAccount()
 	if err != nil {
 		return nil, err
 	}
 
-	//signing Transactions
+	//Signing Tx
+	//Empty Signature Step 1
 	sigV2 := signing.SignatureV2{
 		PubKey: key.PubKey(),
 		Data: &signing.SingleSignatureData{
-			SignMode:  encfg.TxConfig.SignModeHandler().DefaultMode(),
+			SignMode:  C.networkConfig.TxConfig.SignModeHandler().DefaultMode(),
 			Signature: nil,
 		},
 		Sequence: account.GetSequence(),
@@ -221,17 +275,18 @@ func CosmosTxs(accountAddress string, privateKeyHex string, grpcURL string, msgs
 	}
 
 	signerData := xauthsigning.SignerData{
-		ChainID:       chainID,
+		ChainID:       C.chainID,
 		AccountNumber: account.GetAccountNumber(),
 		Sequence:      account.GetSequence(),
 	}
 
+	//Signature Step2
 	sigV2, err = tx.SignWithPrivKey(
-		encfg.TxConfig.SignModeHandler().DefaultMode(),
+		C.networkConfig.TxConfig.SignModeHandler().DefaultMode(),
 		signerData,
 		txBuilder,
 		&key,
-		encfg.TxConfig,
+		C.networkConfig.TxConfig,
 		account.GetSequence(),
 	)
 	if err != nil {
@@ -243,22 +298,94 @@ func CosmosTxs(accountAddress string, privateKeyHex string, grpcURL string, msgs
 		return nil, err
 	}
 
-	txBytes, err := encfg.TxConfig.TxEncoder()(txBuilder.GetTx())
+	txBytes, err := C.networkConfig.TxConfig.TxEncoder()(txBuilder.GetTx())
 	if err != nil {
 		return nil, err
 	}
 
-	//Broadcasting transactions
-	txClient := txtypes.NewServiceClient(grpcConn)
+	return txBytes, nil
 
-	//Simulated Transaction
-	// simres, eres := txClient.Simulate(
-	// 	context.Background(),
-	// 	&txtypes.SimulateRequest{
-	// 		TxBytes: txBytes, // Proto-binary of the signed transaction, see previous step.
-	// 	},
-	// )
-	// fmt.Println(simres, eres)
+}
+
+func (C *CosmosTransaction) SignTxs(msgs []sdk.Msg, gasLimit uint64) ([]byte, error) {
+
+	txBuilder := C.networkConfig.TxConfig.NewTxBuilder()
+
+	//creating transaction
+	txBuilder.SetGasLimit(gasLimit)
+	err := txBuilder.SetMsgs(msgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	//export private key --unsafe --unarmored-hex
+	keyBytes, _ := hex.DecodeString(C.privateKeyHex)
+	key := secp256k1.PrivKey{Key: keyBytes}
+
+	//get Account and Sequence
+	account, err := C.GetAccount()
+	if err != nil {
+		return nil, err
+	}
+
+	//Signing Tx
+	//Empty Signature Step 1
+	sigV2 := signing.SignatureV2{
+		PubKey: key.PubKey(),
+		Data: &signing.SingleSignatureData{
+			SignMode:  C.networkConfig.TxConfig.SignModeHandler().DefaultMode(),
+			Signature: nil,
+		},
+		Sequence: account.GetSequence(),
+	}
+
+	err = txBuilder.SetSignatures(sigV2)
+	if err != nil {
+		return nil, err
+	}
+
+	signerData := xauthsigning.SignerData{
+		ChainID:       C.chainID,
+		AccountNumber: account.GetAccountNumber(),
+		Sequence:      account.GetSequence(),
+	}
+
+	//Signature Step2
+	sigV2, err = tx.SignWithPrivKey(
+		C.networkConfig.TxConfig.SignModeHandler().DefaultMode(),
+		signerData,
+		txBuilder,
+		&key,
+		C.networkConfig.TxConfig,
+		account.GetSequence(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = txBuilder.SetSignatures(sigV2)
+	if err != nil {
+		return nil, err
+	}
+
+	txBytes, err := C.networkConfig.TxConfig.TxEncoder()(txBuilder.GetTx())
+	if err != nil {
+		return nil, err
+	}
+
+	return txBytes, nil
+
+}
+
+func (C *CosmosTransaction) BroadcastTx(txBytes []byte) (txtypes.BroadcastTxResponse, error) {
+	//Broadcasting transactions
+	grpcConn, err := C.dialGrpc()
+	if err != nil {
+		return txtypes.BroadcastTxResponse{}, err
+	}
+	defer grpcConn.Close()
+
+	txClient := txtypes.NewServiceClient(grpcConn)
 
 	grpcRes, err := txClient.BroadcastTx(
 		context.Background(),
@@ -268,5 +395,5 @@ func CosmosTxs(accountAddress string, privateKeyHex string, grpcURL string, msgs
 		},
 	)
 
-	return grpcRes, err
+	return *grpcRes, err
 }
